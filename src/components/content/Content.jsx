@@ -21,8 +21,11 @@ function Content() {
     case 'projects':
       renderedSection = <Projects />;
       break;
+    case 'about':
+      renderedSection = <About />;
+      break;
     default:
-      renderedSection = <Home />; // Default to Home section if no match
+      renderedSection = <Home />; 
   }
   return (
     <Box sx={{ overflowY: 'auto', height: '76vh' }}> 

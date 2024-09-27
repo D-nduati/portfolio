@@ -1,0 +1,456 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Input, Button, List, Card, Space } from 'antd';
+import './Educate.css';
+
+interface Video {
+  id: { videoId: string };
+  snippet: {
+    title: string;
+    description: string;
+  };
+}
+
+const EducationModule = () => {
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [nextPageToken, setNextPageToken] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const fetchVideos = async () => {
+    try {
+      let combinedQuery = 'taekwondo|tkd|korean martial arts|kickboxing';
+      if (searchQuery.trim() !== '') {
+        combinedQuery += `|${searchQuery.trim()}`;
+      }
+
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+        params: {
+          part: 'snippet',
+          maxResults: 10,
+          q: combinedQuery,
+          type: 'video',
+          key: 'AIzaSyD9KTWtU9xb-T5dVCi3-6n83OHKv5O6yI8',
+          pageToken: nextPageToken
+        }
+      });
+
+      if (nextPageToken) {
+        setVideos((prevVideos) => [...prevVideos, ...response.data.items]);
+      } else {
+        setVideos([...response.data.items]);
+      }
+
+      setNextPageToken(response.data.nextPageToken);
+    } catch (error) {
+      console.error('Error fetching videos:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchVideos(); // Initially load videos
+  }, [fetchVideos]); // Include fetchVideos in the dependency array
+
+  const handleLoadMore = () => {
+    fetchVideos(); // Load more videos with the same search query
+  };
+
+  const handleSearch = () => {
+    // Trigger search only if searchQuery is not empty
+    if (searchQuery.trim() !== '') {
+      setVideos([]); // Clear existing videos
+      setNextPageToken(''); // Reset next page token
+      fetchVideos(); // Fetch new videos based on the updated query
+    }
+  };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(event.target.value);
+  };
+
+  return (
+    <div className="education-container">
+      
+      <h2 className="education-heading">Taekwondo Educational Videos</h2>
+      <Space direction="vertical" size="middle">
+        <Input
+          placeholder="Search"
+          value={searchQuery}
+          onChange={handleInputChange}
+          onPressEnter={handleSearch}
+          style={{ width: 300 }}
+        />
+        <Button type="primary" onClick={handleSearch}>
+          Search
+        </Button>
+      </Space>
+      <List
+        grid={{ gutter: 16, column: 3 }}
+        dataSource={videos}
+        renderItem={(video) => (
+          <List.Item>
+            <Card
+              title={video.snippet.title}
+              bordered={false}
+              style={{ width: 300 }}
+            >
+              <iframe
+                src={`https://www.youtube.com/embed/${video.id.videoId}`}
+                allowFullScreen
+                title={video.snippet.title}
+                frameBorder="0"
+                width="100%"
+                height="150"
+              />
+              <p>{video.snippet.description}</p>
+            </Card>
+          </List.Item>
+        )}
+      />
+      {nextPageToken && (
+        <Button type="primary" onClick={handleLoadMore}>
+          Load More Videos
+        </Button>
+      )}
+    </div>
+  );
+};
+
+export default EducationModule;
+
+
+
+
+
+
+import React, { useState, useEffect } from 'react';
+import { Layout, Row, Select, Form, Col, Button, Tabs, Spin, Alert, message } from 'antd';
+import SettingsForm from './SettingsForm';
+import Settings2Form from './Settings2Form';
+import SettingsSummary from './SettingsSummary';
+import MembersSettings from '../Random/MembersSettings';
+//import Proc from '../BranchBalances/Modals/Proc';
+import { schemeCodeSettings, dividendSettings, changeDividendSettings } from '@/services/dividend';
+
+const { Content, Header } = Layout;
+const { TabPane } = Tabs;
+
+function SettingsInclusive() {
+  const [year, setYear] = useState('2022');
+  const [data1, setData1] = useState();
+  const [scheme, setScheme] = useState('0001');
+  const [customYear, setCustomYear] = useState('');
+  const [customScheme, setCustomScheme] = useState('');
+  const [settingsData, setSettingsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [posting, setPosting] = useState(false);
+
+  const handleCustomChange = (setter, valueSetter) => (value) => {
+    value === 'custom' ? setter(valueSetter) : setter(value);
+  };
+
+  const yearOptions = [
+    { value: '2022', label: '2022' },
+    { value: '2024', label: 'Jan 2024 - Dec 2024' },
+  ];
+
+  const schemeOptions = data1.map((scheme) => ({
+    value: scheme.schemeCode,
+    label: scheme.schemeName,
+  }));
+
+  useEffect(() => {
+    const fetchSchemesAndSettings = async () => {
+      try {
+        const response1 = await schemeCodeSettings();
+        const schemes = await response1.data;
+
+        setData1(schemes);
+
+        const selectedScheme = schemes.find((scheme) => scheme.schemeCode === scheme);
+
+        const response2 = await dividendSettings({ year, scheme: selectedScheme.schemeCode });
+        if (response2.status === 0) {
+
+          setSettingsData(response2.data['dividend-settings']);
+        } else {
+          setError(response2.message);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSchemesAndSettings();
+  }, []);
+
+  const handleDataFromChild = (data) => {
+    setSettingsData((prev) => ({
+      ...prev,
+      ...data,
+    }));
+    console.log(data);
+  };
+
+  const handleSavePermanently = async () => {
+    setPosting(true);
+    try {
+      const response = await changeDividendSettings(settingsData);
+      if (response.status === 0) {
+        message.success('Settings updated successfully!');
+      } else {
+        message.error(`Failed to update settings: ${response.message}`);
+      }
+    } catch (err) {
+      message.error('Error posting form data. Please try again.');
+      console.error('Error posting form data:', err);
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  if (loading) return <Spin tip="Loading settings..." />;
+  if (error) return <Alert message="Error" description={error} type="error" showIcon />;
+  if (posting) return <Spin tip="Posting settings..." />;
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header style={{ backgroundColor: '#fff', padding: 0 }}>
+        <Row>
+          <Col span={3} offset={1}>
+            <Form.Item label="Financial Year">
+              <Select
+                defaultValue="2022"
+                onChange={handleCustomChange(setYear, customYear)}
+                options={yearOptions}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={4} offset={1}>
+            {data1.length > 0 && (
+              <Form.Item label="Scheme">
+                <Select
+                  defaultValue="0001"
+                  onChange={handleCustomChange(setScheme, customScheme)}
+                  options={schemeOptions}
+                />
+              </Form.Item>
+            )}
+          </Col>
+          <Col span={4} push={4}>
+            <Button type="primary">View Statement</Button>
+          </Col>
+          <Col span={4} push={4}>
+            <Button type="primary">Dividend Reports</Button>
+          </Col>
+        </Row>
+      </Header>
+
+      <Content style={{ backgroundColor: '#fff', padding: 50 }}>
+        <Tabs defaultActiveKey="1">
+          <TabPane tab="Settings 1" key="1">
+            <SettingsForm
+              year={year}
+              scheme={scheme}
+              settingsData={settingsData}
+              sendDataToParent={handleDataFromChild}
+            />
+          </TabPane>
+
+          <TabPane tab="Settings 2" key="2">
+            <Settings2Form settingsData={settingsData} sendDataToParent={handleDataFromChild} />
+          </TabPane>
+          <TabPane tab="Settings Summary" key="3">
+            <SettingsSummary />
+          </TabPane>
+          <TabPane tab="Members Settings" key="4">
+            <MembersSettings />
+          </TabPane>
+          {/* <TabPane tab="Proc" key="5">
+            <Proc />
+          </TabPane> */}
+        </Tabs>
+      </Content>
+      <Button
+        type="primary"
+        style={{ margin: '16px auto', display: 'block', width: 'auto' }}
+        onClick={handleSavePermanently}
+        loading={posting}
+      >
+        Save
+      </Button>
+    </Layout>
+  );
+}
+
+export default SettingsInclusive;
+
+
+import React, { useState, useEffect } from 'react';
+import { Layout, Row, Select, Form, Col, Button, Tabs, Spin, Alert, message } from 'antd';
+import SettingsForm from './SettingsForm';
+import Settings2Form from './Settings2Form';
+import SettingsSummary from './SettingsSummary';
+import MembersSettings from '../Random/MembersSettings';
+import { schemeCodeSettings, dividendSettings, changeDividendSettings } from '@/services/dividend';
+
+const { Content, Header } = Layout;
+const { TabPane } = Tabs;
+
+function SettingsInclusive() {
+  const [year, setYear] = useState('2022');
+  const [scheme, setScheme] = useState('0001');
+  const [customYear, setCustomYear] = useState('');
+  const [customScheme, setCustomScheme] = useState('');
+  const [schemes, setSchemes] = useState([]);
+  const [settingsData, setSettingsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [posting, setPosting] = useState(false);
+
+  const handleCustomChange = (setter, valueSetter) => (value) => {
+    value === 'custom' ? setter(valueSetter) : setter(value);
+  };
+
+  const yearOptions = [
+    { value: '2022', label: '2022' },
+    { value: '2024', label: 'Jan 2024 - Dec 2024' },
+  ];
+
+  const fetchSchemes = async () => {
+    try {
+      const response = await schemeCodeSettings();
+      const schemesData = response.data;
+      setSchemes(schemesData);
+      setScheme(schemesData[0]?.schemeCode || ''); // Set default scheme
+    } catch (err) {
+      setError('Failed to fetch schemes.');
+    }
+  };
+
+  const fetchSettings = async (selectedScheme) => {
+    try {
+      const response = await dividendSettings({ year, scheme: selectedScheme });
+      if (response.status === 0) {
+        setSettingsData(response.data['dividend-settings']);
+      } else {
+        setError(response.message);
+      }
+    } catch (err) {
+      setError('Failed to fetch settings.');
+    }
+  };
+
+  useEffect(() => {
+    fetchSchemes();
+  }, []);
+
+  useEffect(() => {
+    if (scheme) {
+      fetchSettings(scheme);
+    }
+  }, [year, scheme]);
+
+  const handleDataFromChild = (data) => {
+    setSettingsData((prev) => ({
+      ...prev,
+      ...data,
+    }));
+  };
+
+  const handleSavePermanently = async () => {
+    setPosting(true);
+    try {
+      const response = await changeDividendSettings(settingsData);
+      if (response.status === 0) {
+        message.success('Settings updated successfully!');
+      } else {
+        message.error(`Failed to update settings: ${response.message}`);
+      }
+    } catch (err) {
+      message.error('Error posting form data. Please try again.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  if (loading) return <Spin tip="Loading settings..." />;
+  if (error) return <Alert message="Error" description={error} type="error" showIcon />;
+  if (posting) return <Spin tip="Posting settings..." />;
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header style={{ backgroundColor: '#fff', padding: 0 }}>
+        <Row>
+          <Col span={3} offset={1}>
+            <Form.Item label="Financial Year">
+              <Select
+                value={year}
+                onChange={handleCustomChange(setYear, customYear)}
+                options={yearOptions}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={4} offset={1}>
+            {schemes.length > 0 && (
+              <Form.Item label="Scheme">
+                <Select
+                  value={scheme}
+                  onChange={(value) => setScheme(value)}
+                  options={schemes.map((s) => ({
+                    value: s.schemeCode,
+                    label: s.schemeName,
+                  }))}
+                />
+              </Form.Item>
+            )}
+          </Col>
+          <Col span={4} push={4}>
+            <Button type="primary">View Statement</Button>
+          </Col>
+          <Col span={4} push={4}>
+            <Button type="primary">Dividend Reports</Button>
+          </Col>
+        </Row>
+      </Header>
+
+      <Content style={{ backgroundColor: '#fff', padding: 50 }}>
+        <Tabs defaultActiveKey="1">
+          <TabPane tab="Settings 1" key="1">
+            <SettingsForm
+              year={year}
+              scheme={scheme}
+              settingsData={settingsData}
+              sendDataToParent={handleDataFromChild}
+            />
+          </TabPane>
+
+          <TabPane tab="Settings 2" key="2">
+            <Settings2Form
+              settingsData={settingsData}
+              sendDataToParent={handleDataFromChild}
+            />
+          </TabPane>
+          <TabPane tab="Settings Summary" key="3">
+            <SettingsSummary />
+          </TabPane>
+          <TabPane tab="Members Settings" key="4">
+            <MembersSettings />
+          </TabPane>
+        </Tabs>
+      </Content>
+      <Button
+        type="primary"
+        style={{ margin: '16px auto', display: 'block', width: 'auto' }}
+        onClick={handleSavePermanently}
+        loading={posting}
+      >
+        Save
+      </Button>
+    </Layout>
+  );
+}
+
+export default SettingsInclusive;
+
